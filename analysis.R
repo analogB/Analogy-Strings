@@ -18,7 +18,7 @@ dir=getwd()
 dirData=paste(dir,'/data',sep='')
 setwd(dir)
 
-txtStims <- read_file("textStims Oct 2016.txt")
+txtStims <- read_file("textStims.txt")
 stims=fromJSON(txtStims, simplifyVector = TRUE, flatten = FALSE)
 
 chunkSize=1
