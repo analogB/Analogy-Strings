@@ -101,7 +101,6 @@ rawData$pA            <- as.factor    (rawData$pA)
 rawData$pB            <- as.factor    (rawData$pA)
 rawData$pAB           <- as.factor    (rawData$pA)
 rawData$anchored      <- as.factor    (rawData$anchored)
-
 rawData$subjectID <- as.numeric(as.factor(rawData$sonaID))
 
 rawData[,'blockID']<-substr(rawData[,'internal_node_id'],5,nchar(rawData[,'internal_node_id']))
@@ -229,12 +228,8 @@ for (i in 1:nParticipants){
 # cor.test(x=data$rational[filter2], y=data$stimAdjMed[filter2], use="complete.obs", method="pearson") 
 # t.test(delta$sameBias)
 
-#dataFit <- function(a,b,displayDiagnostics=FALSE, displayPosteriors=FALSE, saveOutput=FALSE, imageType="pdf"){
 displayDiagnostics=FALSE
 displayPosteriors=FALSE
-saveOutput=FALSE
-imageType="pdf"
-
 setwd(dir)
 
 #  brogers: uses rjags & DBDA2E-utilities.R from Kruschke, J. K. (2014). Doing Bayesian Data Analysis
@@ -242,83 +237,41 @@ graphics.off()
 
 require(rjags)
 source("DBDA2E-utilities.R")
-fileNameRoot <- 'dataFit'
 
-#------------------------------------------------------------------------------
-# FUNCTION DESCRIPTION
-# Input: This function takes ...
-#------------------------------------------------------------------------------
-# INPUT DATA
-if (!saveOutput){fileNameRoot <- NULL}
-
-#------------------------------------------------------------------------------
 # FORMAT DATA
-
-#Add dummy variable on the end to track predictive posteriors
-
-#need to rank subject for jags?
 subject <- data$subjectID
 response <- data$responseB
 rational <- data$rational
 nSubject <- length(unique(subject))
 nResponse <- length(response)
   
-  #Data list for rjags
-  dataList = list(
-    subject = subject ,
-    response = response ,
-    rational = rational/100 , 
-    nSubject = nSubject,
-    nResponse = nResponse
-    #pInt = 
-    #pExt=
-  ) #end dataList
-#------------------------------------------------------------------------------
-# THE MODEL.
-modelString = "
-model {
-for ( i in 1:nResponse ) {
-response[i] ~ dnorm(predicted[i],tau[subject[i]])
-predicted[i] <- (0^(flip[i]) * rawPredicted[i]) + (0^(1-flip[i]) * (1 - rawPredicted[i]))
-flip[i] ~ dbin(errorRate[subject[i]],1)
-rawPredicted[i] <- bump[subject[i]]+scale[subject[i]]/(1+exp(-shape[subject[i]] * (rational[i] - location[subject[i]]))) 
-#                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pInt[i] - location[subject[i]]))) +
-#                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pExt[i] - location[subject[i]]))) 
-
-}
-for ( j in 1:nSubject ) {
-tau[j] ~ dgamma(3,1)
-shape[j] ~ dgamma(3,1)
-scale[j] ~ dbeta(1.1,1.1)
-errorRate[j] <-0 #~ dbeta(1.1,1.1)
-location[j] ~ dbeta(1.1,1.1)
-bump[j] ~ dbeta(1.1,1.1)
-}
-}
-" # close quote for modelString
-writeLines( modelString , con="TEMPmodel.txt" )
+#Data list for rjags
+dataList = list(
+  subject = subject ,
+  response = response/100 ,
+  rational = rational/100 , 
+  nSubject = nSubject,
+  nResponse = nResponse
+)
 
 #------------------------------------------------------------------------------
 # RUN CHAINS
 # initsList = list( theta=c(0.5,0.5,0.5) , m=3 ) #not necessary with simple models
-
-parameters = c("shape","tau","errorRate","scale","location","predicted","rawPredicted") 
-adaptSteps    =  300      # Number of steps to "tune" the samplers.
-burnInSteps   =  1000      # Number of steps to "burn-in" the samplers.
+parameters = c("shape","tau","flipRate","scale","location","predicted","rawPredicted") 
+adaptSteps    =  100      # Number of steps to "tune" the samplers.
+burnInSteps   =  500      # Number of steps to "burn-in" the samplers.
 numSavedSteps = 500      # Total number of steps to save collectively from all chains. 
 nChains   = 3               # Number of chains to run.
 thinSteps = 1               # Number of steps to "thin" (1=keep every step).
 nPerChain = ceiling( ( numSavedSteps * thinSteps ) / nChains ) # Steps per chain.
 
 # Create, initialize, and adapt the model:
-jagsModel = jags.model( "TEMPmodel.txt" , data=dataList ,  n.chains=nChains , n.adapt=adaptSteps )  #inits=initsList ,
+jagsModel = jags.model( "logistic_model_01.txt" , data=dataList ,  n.chains=nChains , n.adapt=adaptSteps )  #inits=initsList ,
 cat( "Burning in the MCMC chain...\n" ) # Burn-in:
 update( jagsModel , n.iter=burnInSteps )
 cat( "Sampling final MCMC chain...\n" ) # The saved MCMC chain:
 codaSamples = coda.samples( jagsModel , variable.names=parameters , n.iter=nPerChain , thin=thinSteps )
-if (saveOutput){
-  save(codaSamples,file=paste0(fileNameRoot,"Mcmc.Rdata"))
-}
+
 #------------------------------------------------------------------------------- 
 # CHAIN DIAGNOSTICS
 if (displayDiagnostics){
@@ -326,36 +279,29 @@ if (displayDiagnostics){
   for ( parName in parameterNames ) {
     diagMCMC( codaSamples , parName=parName ,saveName=fileNameRoot , saveType=imageType)
   }
-} #end if (displayDiagnostics)
+} 
 #------------------------------------------------------------------------------
 # ANALYSE RESULTS
-
-# Convert coda-object codaSamples to matrix object for easier handling.
 mcmcMat = as.matrix( codaSamples , chains=TRUE )
 chainLength <- nrow(mcmcMat)
-
 combined <- data.frame(rbind(codaSamples[[1]],codaSamples[[2]],codaSamples[[3]]))
-data$predicted<-colMeans(combined)[grep('predicted',names(combined))] 
-data$rawPredicted<-colMeans(combined)[grep('rawPredicted',names(combined))] 
 
-with(data,(plot(rational,predicted)))
-
-# 
 # #------------------------------------------------------------------------------
-# # OUTPUT & GRAPHICS
-# 
+# # POSTERIOR GRAPHICS
 # if (displayPosteriors){
 #   #Open graphics device and specify layout of graphics
 #   openGraph(width=12,height=4)
 #   par( mar=0.5+c(4,3,2,3) , mgp=c(2.0,0.7,0) )
 #   fontSize = 1
-#   #Plots 1-4 are for the distribution on the categorical proportion
-#   plotPost( model , breaks=seq( 0.9,2.1,0.2) , cenTend="mean" , xlab="Chance vs Pattern" , main="Prior Selection")
-#   if (saveOutput){
-#     saveGraph( file=paste0(fileNameRoot,"Post") , type=imageType )
-#   }
-#   
-#end if (displayPosteriors)
-#return(#targetPrediction)
-#end function 
-#}
+#   #Plots
+#   plotPost( model , breaks=seq( 0.9,2.1,0.2) , cenTend="mean" , xlab="Chance vs Pattern" , main="Prior Selection")  
+# }
+
+data$predicted<-colMeans(combined)[grep('predicted',names(combined))] 
+data$rawPredicted<-colMeans(combined)[grep('rawPredicted',names(combined))] 
+
+#Scatterplots: Data and model fit versus rational
+with(data,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,0.1)))))
+with(data,(points(jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,0.1)))))
+with(data,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,0.1)))))
+with(data,(plot  (jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,0.1)))))
