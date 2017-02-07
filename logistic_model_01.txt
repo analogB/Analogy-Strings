@@ -9,9 +9,9 @@ rawPredicted[i] <- scale[subject[i]]/(1+exp(-shape[subject[i]] * (rational[i] - 
 
 }
 for ( j in 1:nSubject ) {
-tau[j] ~ dgamma(3,1)
-shape[j] ~ dgamma(3,1)
-scale[j] ~ dbeta(1.1,1.1)
+tau[j] ~ dgamma(2,2)
+shape[j] ~ dgamma(2,2)
+scale[j] <- 1 #~ dbeta(1.1,1.1)
 flipRate[j] ~ dbeta(1.1,1.1)
 location[j] ~ dbeta(1.1,1.1)
 }

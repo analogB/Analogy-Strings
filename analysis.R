@@ -239,9 +239,12 @@ require(rjags)
 source("DBDA2E-utilities.R")
 
 # FORMAT DATA
-subject <- data$subjectID
-response <- data$responseB
-rational <- data$rational
+maxSubjSubset<-30
+jagsFilter <- (data$subjectID<=maxSubjSubset)
+
+subject <- data[jagsFilter,]$subjectID
+response <- data[jagsFilter,]$responseB
+rational <- data[jagsFilter,]$rational
 nSubject <- length(unique(subject))
 nResponse <- length(response)
   
@@ -258,8 +261,8 @@ dataList = list(
 # RUN CHAINS
 # initsList = list( theta=c(0.5,0.5,0.5) , m=3 ) #not necessary with simple models
 parameters = c("shape","tau","flipRate","scale","location","predicted","rawPredicted") 
-adaptSteps    =  100      # Number of steps to "tune" the samplers.
-burnInSteps   =  500      # Number of steps to "burn-in" the samplers.
+adaptSteps    =  2000      # Number of steps to "tune" the samplers.
+burnInSteps   =  10000      # Number of steps to "burn-in" the samplers.
 numSavedSteps = 500      # Total number of steps to save collectively from all chains. 
 nChains   = 3               # Number of chains to run.
 thinSteps = 1               # Number of steps to "thin" (1=keep every step).
@@ -272,21 +275,21 @@ update( jagsModel , n.iter=burnInSteps )
 cat( "Sampling final MCMC chain...\n" ) # The saved MCMC chain:
 codaSamples = coda.samples( jagsModel , variable.names=parameters , n.iter=nPerChain , thin=thinSteps )
 
-#------------------------------------------------------------------------------- 
-# CHAIN DIAGNOSTICS
-if (displayDiagnostics){
-  parameterNames = varnames(codaSamples) # get all parameter names
-  for ( parName in parameterNames ) {
-    diagMCMC( codaSamples , parName=parName ,saveName=fileNameRoot , saveType=imageType)
-  }
-} 
+# #------------------------------------------------------------------------------- 
+# # CHAIN DIAGNOSTICS
+# if (displayDiagnostics){
+#   parameterNames = varnames(codaSamples) # get all parameter names
+#   for ( parName in parameterNames ) {
+#     diagMCMC( codaSamples , parName=paste('flipRate[',134,']',sep='') ,saveName=fileNameRoot , saveType=imageType)
+#   }
+# } 
 #------------------------------------------------------------------------------
 # ANALYSE RESULTS
 mcmcMat = as.matrix( codaSamples , chains=TRUE )
 chainLength <- nrow(mcmcMat)
 combined <- data.frame(rbind(codaSamples[[1]],codaSamples[[2]],codaSamples[[3]]))
 
-# #------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # # POSTERIOR GRAPHICS
 # if (displayPosteriors){
 #   #Open graphics device and specify layout of graphics
@@ -294,14 +297,32 @@ combined <- data.frame(rbind(codaSamples[[1]],codaSamples[[2]],codaSamples[[3]])
 #   par( mar=0.5+c(4,3,2,3) , mgp=c(2.0,0.7,0) )
 #   fontSize = 1
 #   #Plots
-#   plotPost( model , breaks=seq( 0.9,2.1,0.2) , cenTend="mean" , xlab="Chance vs Pattern" , main="Prior Selection")  
+#   plotPost(mcmcMat[,paste('flipRate[',134,']',sep='')] , breaks=seq( 0,1,0.01) , cenTend="mean" , xlab="Chance vs Pattern" , main="Prior Selection")  
 # }
 
-data$predicted<-colMeans(combined)[grep('predicted',names(combined))] 
-data$rawPredicted<-colMeans(combined)[grep('rawPredicted',names(combined))] 
+results<-data[jagsFilter,]
+results$predicted<-colMeans(combined)[grep('predicted',names(combined))] 
+results$rawPredicted<-colMeans(combined)[grep('rawPredicted',names(combined))] 
+results$flipRate<-colMeans(combined)[grep('flipRate',names(combined))] 
 
 #Scatterplots: Data and model fit versus rational
-with(data,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,0.1)))))
-with(data,(points(jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,0.1)))))
-with(data,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,0.1)))))
-with(data,(plot  (jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,0.1)))))
+
+for (i in 1:10){#maxSubjSubset
+plotFilter<-(results$subjectID==i)
+plotData <- results[plotFilter,]
+density <- 1-0.9*length(i)/nSubject
+
+plotName<- paste('participant',i)
+
+#hist(mcmcMat[,paste('scale[',i,']',sep='')],main=paste(plotName,'scale'),breaks='sturges')  
+hist(mcmcMat[,paste('location[',i,']',sep='')],main=paste(plotName,'location'),breaks='sturges')  
+hist(mcmcMat[,paste('tau[',i,']',sep='')],main=paste(plotName,'tau'),breaks='sturges')  
+hist(mcmcMat[,paste('shape[',i,']',sep='')],main=paste(plotName,'shape'),breaks='sturges')  
+hist(mcmcMat[,paste('flipRate[',i,']',sep='')],main=paste(plotName, 'flip'),breaks=seq(0,1,0.05))  
+with(plotData,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,density)),main=plotName)))
+with(plotData,(points(jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,density)))))
+}
+
+##Separate Plots
+#with(plotData,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,density)))))
+#with(plotData,(plot  (jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,density)))))
