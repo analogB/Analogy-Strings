@@ -304,10 +304,14 @@ results<-data[jagsFilter,]
 results$predicted<-colMeans(combined)[grep('predicted',names(combined))] 
 results$rawPredicted<-colMeans(combined)[grep('rawPredicted',names(combined))] 
 results$flipRate<-colMeans(combined)[grep('flipRate',names(combined))] 
+results$tau<-colMeans(combined)[grep('tau',names(combined))] 
+results$location<-colMeans(combined)[grep('location',names(combined))] 
+results$shape<-colMeans(combined)[grep('shape',names(combined))] 
 
 #Scatterplots: Data and model fit versus rational
 
-for (i in 1:10){#maxSubjSubset
+for (i in 1:maxSubjSubset){#maxSubjSubset
+#i<-2
 plotFilter<-(results$subjectID==i)
 plotData <- results[plotFilter,]
 density <- 1-0.9*length(i)/nSubject
@@ -315,14 +319,20 @@ density <- 1-0.9*length(i)/nSubject
 plotName<- paste('participant',i)
 
 #hist(mcmcMat[,paste('scale[',i,']',sep='')],main=paste(plotName,'scale'),breaks='sturges')  
-hist(mcmcMat[,paste('location[',i,']',sep='')],main=paste(plotName,'location'),breaks='sturges')  
-hist(mcmcMat[,paste('tau[',i,']',sep='')],main=paste(plotName,'tau'),breaks='sturges')  
-hist(mcmcMat[,paste('shape[',i,']',sep='')],main=paste(plotName,'shape'),breaks='sturges')  
-hist(mcmcMat[,paste('flipRate[',i,']',sep='')],main=paste(plotName, 'flip'),breaks=seq(0,1,0.05))  
-with(plotData,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,density)),main=plotName)))
-with(plotData,(points(jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,density)))))
+# hist(mcmcMat[,paste('location[',i,']',sep='')],main=paste(plotName,'location'),breaks=seq(0,1,0.05))  
+# hist(mcmcMat[,paste('tau[',i,']',sep='')],main=paste(plotName,'tau'),breaks='sturges')  
+# hist(mcmcMat[,paste('shape[',i,']',sep='')],main=paste(plotName,'shape'),breaks='sturges')  
+# hist(mcmcMat[,paste('flipRate[',i,']',sep='')],main=paste(plotName, 'flip'),breaks=seq(0,1,0.05))  
+with(plotData,(plot  (jitter(rational,2), jitter(responseB,1),    pch=16,col=(rgb(0,0,0,density)),main=plotName)))
+with(plotData,(points(jitter(rational,2), jitter(predicted*100,1),pch=16,col=(rgb(1,0,0,density)))))
 }
 
-##Separate Plots
-#with(plotData,(plot  (jitter(rational,20), jitter(responseB,10),    pch=16,col=(rgb(0,0,0,density)))))
-#with(plotData,(plot  (jitter(rational,20), jitter(predicted*100,10),pch=16,col=(rgb(1,0,0,density)))))
+maxShape<-25
+with(results[results$shape<=maxShape,],hist(shape,breaks=seq(0,maxShape,1)))
+
+maxTau<-150
+with(results[results$tau<=maxTau,],hist(tau,breaks=seq(0,maxTau,10)))
+
+with(results,hist(flipRate,breaks=seq(0,1,.05)))
+
+with(results,hist(location,breaks=seq(0,1,.05)))

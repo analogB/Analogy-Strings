@@ -8,11 +8,18 @@ rawPredicted[i] <- scale[subject[i]]/(1+exp(-shape[subject[i]] * (rational[i] - 
 #                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pExt[i] - location[subject[i]]))) 
 
 }
+
+#uninformed prior parameter
+k<-1.2 #for gamma
+theta<-1/20 #for gamma
+alpha<-1.1 #for beta
+beta<-1.1 #for beta
+
 for ( j in 1:nSubject ) {
-tau[j] ~ dgamma(2,2)
-shape[j] ~ dgamma(2,2)
-scale[j] <- 1 #~ dbeta(1.1,1.1)
-flipRate[j] ~ dbeta(1.1,1.1)
-location[j] ~ dbeta(1.1,1.1)
+tau[j] ~ dgamma(k,theta)
+shape[j] ~ dgamma(k,theta)
+scale[j] <- 1 #~ dbeta(alpha,beta)
+flipRate[j] ~ dbeta(alpha,beta)
+location[j] ~ dbeta(alpha,beta)
 }
 }
