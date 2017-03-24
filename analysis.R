@@ -19,6 +19,7 @@ dirData=paste(dir,'/data',sep='')
 setwd(dir)
 
 txtStims <- read_file("textStims.txt")
+txtStims <- read_file("textStims.txt")
 stims=fromJSON(txtStims, simplifyVector = TRUE, flatten = FALSE)
 
 chunkSize=1
@@ -48,6 +49,12 @@ stims[,'block1NodeID']<-paste('0.0-',block1Node,'.0-',row(stims[1])-1,'.0',sep='
 stims[,'block2NodeID']<-paste('0.0-',block2Node,'.0-',row(stims[1])-1,'.0',sep='')
 stims[,'stimID']<-row(stims[1])-1
 
+
+#if (length(stims[stims=='NA'])>0){
+#  stims[stims=='NA'] <- NULL
+#} 
+stims[!is.na(stims$randomized==0)&stims$randomized==0,]
+
 #####SPECIFY DATA FRAME TYPES#####
 stims$stringA       <- as.character  (stims$stringA)
 stims$stringB       <- as.character  (stims$stringB)
@@ -67,6 +74,76 @@ stims$block1NodeID  <- as.character  (stims$block1NodeID)
 stims$block2NodeID  <- as.character  (stims$block2NodeID)
 stims$stimID        <- as.factor     (stims$stimID) 
 
+find_p <- function(str){
+  count<-0
+  sum<-0
+  for (i in 1:nchar(str)){
+    char<-as.numeric(substring(str,i,i))
+    if (!is.na(char)){
+      count<-count+1
+      sum<-sum+char
+    }
+  }
+  return(sum/count)
+}
+
+find_pAB <- function(strA,strB){
+  count<-0
+  matches<-0
+  for (i in 1:nchar(strA)){
+    charA<-as.numeric(substring(strA,i,i))
+    charB<-as.numeric(substring(strB,i,i))
+    if (!is.na(charA)&!is.na(charB)){
+      count<-count+1
+      if (charA==charB){
+        matches<-matches+1
+      }
+    }
+  }
+  return(matches/count)
+}
+
+find_targ <- function (strA,strB){
+  for (i in 1:nchar(strA)){
+    if (substring(strB,i,i)=='?'){
+      targ <- as.numeric(substring(strA,i,i))
+      return(targ)
+    }
+  }
+}
+
+stims$pB_oriented = NULL
+for (i in 1:length(stims$stringB)){
+  stims$pB_oriented[i] <- find_p(stims$stringB[i])
+}
+
+stims$pA_oriented = NULL
+for (i in 1:length(stims$stringA)){
+  stims$pA_oriented[i] <- find_p(stims$stringA[i])
+}
+
+stims$pAB_oriented = NULL
+for (i in 1:length(stims$stringA)){
+  pAB <- find_pAB(stims$stringA[i],stims$stringB[i])
+  targ <- find_targ(stims$stringA[i],stims$stringB[i])
+  if (targ==1 & pAB>0.5){
+      stims$pAB_oriented[i] <- pAB
+  }else{ 
+    if (targ==1 & pAB<=0.5){
+      stims$pAB_oriented[i] <- pAB
+  }else{ 
+    if (targ==0 & pAB>0.5){
+      stims$pAB_oriented[i] <- 1-pAB
+  }else{ 
+    if (targ==0 & pAB<=0.5){
+      stims$pAB_oriented[i] <- 1-pAB
+}}}}}
+
+stims$pA_oriented           <- as.numeric     (stims$pA_oriented)
+stims$pB_oriented            <- as.numeric     (stims$pB_oriented)
+stims$pAB_oriented           <- as.numeric     (stims$pAB_oriented)
+
+
 ### READ DATA ###
 setwd(dirData)
 fileList <- list.files()
@@ -80,6 +157,9 @@ for (file in fileList){
   if (!exists("rawData")){
     rawData <- read.csv(file, header=TRUE, sep=",")}
 }
+
+#rawData[is.na(rawData)] <- NULL
+rawData <- rawData[!is.na(rawData$randomized==0)&rawData$randomized==0,]
 
 rawData$rt            <- as.numeric   (rawData$rt)
 rawData$trial_type    <- as.factor    (rawData$trial_type)
@@ -98,8 +178,8 @@ rawData$nA            <- as.factor    (rawData$nA)
 rawData$nB            <- as.factor    (rawData$nB)
 rawData$nAB           <- as.factor    (rawData$nAB)
 rawData$pA            <- as.factor    (rawData$pA)
-rawData$pB            <- as.factor    (rawData$pA)
-rawData$pAB           <- as.factor    (rawData$pA)
+rawData$pB            <- as.factor    (rawData$pB)
+rawData$pAB           <- as.factor    (rawData$pAB)
 rawData$anchored      <- as.factor    (rawData$anchored)
 rawData$subjectID <- as.numeric(as.factor(rawData$sonaID))
 
@@ -113,8 +193,9 @@ rawData$stimID<-substr(rawData$stimID,1,nchar(rawData$stimID)-2)
 
 rawData$stimID[rawData$blockID=='6'] <- '' #replace training stimulus stimID with blank
 
+
 ###   Merge trial stimulus assignments and stimulus characteristics into each line
-data <- merge(rawData,stims,by = c('stimID'))
+data <- merge(rawData,stims,by = c('stimID','N','nA','nB','nAB','pA','pB','pAB','anchored'))
 data$stimID <- as.factor(data$stimID)
 data$blockID <- as.factor(data$blockID)
 
@@ -245,6 +326,8 @@ jagsFilter <- (data$subjectID<=maxSubjSubset)
 subject <- data[jagsFilter,]$subjectID
 response <- data[jagsFilter,]$responseB
 rational <- data[jagsFilter,]$rational
+internal <- data[jagsFilter,]$pB_oriented
+external <- data[jagsFilter,]$pAB_oriented
 nSubject <- length(unique(subject))
 nResponse <- length(response)
   
@@ -253,6 +336,8 @@ dataList = list(
   subject = subject ,
   response = response/100 ,
   rational = rational/100 , 
+  internal = internal,
+  external = external,
   nSubject = nSubject,
   nResponse = nResponse
 )
@@ -260,7 +345,7 @@ dataList = list(
 #------------------------------------------------------------------------------
 # RUN CHAINS
 # initsList = list( theta=c(0.5,0.5,0.5) , m=3 ) #not necessary with simple models
-parameters = c("shape","tau","flipRate","scale","location","predicted","rawPredicted") 
+parameters = c("shape","tau","flipRate","scale","location","predicted","rawPredicted", "internalEvidenceWeight","externalEvidenceWeight") 
 adaptSteps    =  2000      # Number of steps to "tune" the samplers.
 burnInSteps   =  10000      # Number of steps to "burn-in" the samplers.
 numSavedSteps = 500      # Total number of steps to save collectively from all chains. 
@@ -308,23 +393,29 @@ results$tau<-colMeans(combined)[grep('tau',names(combined))]
 results$location<-colMeans(combined)[grep('location',names(combined))] 
 results$shape<-colMeans(combined)[grep('shape',names(combined))] 
 
+results$internalWt<-colMeans(combined)[grep('internalEvidenceWeight',names(combined))] 
+results$externalWt<-colMeans(combined)[grep('externalEvidenceWeight',names(combined))] 
+results$rationalWt<-1 - results$internalWt - results$externalWt
+
+
+
 #Scatterplots: Data and model fit versus rational
 
 for (i in 1:maxSubjSubset){#maxSubjSubset
-#i<-2
-plotFilter<-(results$subjectID==i)
-plotData <- results[plotFilter,]
-density <- 1-0.9*length(i)/nSubject
-
-plotName<- paste('participant',i)
-
-#hist(mcmcMat[,paste('scale[',i,']',sep='')],main=paste(plotName,'scale'),breaks='sturges')  
-# hist(mcmcMat[,paste('location[',i,']',sep='')],main=paste(plotName,'location'),breaks=seq(0,1,0.05))  
-# hist(mcmcMat[,paste('tau[',i,']',sep='')],main=paste(plotName,'tau'),breaks='sturges')  
-# hist(mcmcMat[,paste('shape[',i,']',sep='')],main=paste(plotName,'shape'),breaks='sturges')  
-# hist(mcmcMat[,paste('flipRate[',i,']',sep='')],main=paste(plotName, 'flip'),breaks=seq(0,1,0.05))  
-with(plotData,(plot  (jitter(rational,2), jitter(responseB,1),    pch=16,col=(rgb(0,0,0,density)),main=plotName)))
-with(plotData,(points(jitter(rational,2), jitter(predicted*100,1),pch=16,col=(rgb(1,0,0,density)))))
+    #i<-2
+    plotFilter<-(results$subjectID==i)
+    plotData <- results[plotFilter,]
+    density <- 1-0.9*length(i)/nSubject
+    
+    plotName<- paste('participant',i)
+    
+    #hist(mcmcMat[,paste('scale[',i,']',sep='')],main=paste(plotName,'scale'),breaks='sturges')  
+    # hist(mcmcMat[,paste('location[',i,']',sep='')],main=paste(plotName,'location'),breaks=seq(0,1,0.05))  
+    # hist(mcmcMat[,paste('tau[',i,']',sep='')],main=paste(plotName,'tau'),breaks='sturges')  
+    # hist(mcmcMat[,paste('shape[',i,']',sep='')],main=paste(plotName,'shape'),breaks='sturges')  
+    # hist(mcmcMat[,paste('flipRate[',i,']',sep='')],main=paste(plotName, 'flip'),breaks=seq(0,1,0.05))  
+    with(plotData,(plot  (jitter(rational,2), jitter(responseB,1),    pch=16,col=(rgb(0,0,0,density)),main=plotName)))
+    with(plotData,(points(jitter(rational,2), jitter(predicted*100,1),pch=16,col=(rgb(1,0,0,density)))))
 }
 
 maxShape<-25
@@ -336,3 +427,15 @@ with(results[results$tau<=maxTau,],hist(tau,breaks=seq(0,maxTau,10)))
 with(results,hist(flipRate,breaks=seq(0,1,.05)))
 
 with(results,hist(location,breaks=seq(0,1,.05)))
+
+# with(plotData,(plot  (jitter(rational,2), jitter(responseB,1),    pch=16,col=c("blue", "red")[1+(pB.x==0.8)],main=plotName)))
+
+
+intWt<-aggregate(results$internalWt,list(results$subjectID),mean)
+extWt<-aggregate(results$externalWt,list(results$subjectID),mean)
+ratWt<-aggregate(results$rationalWt,list(results$subjectID),mean)
+
+hist(intWt$x,breaks=seq(0,1,.05))
+hist(extWt$x,breaks=seq(0,1,.05))
+hist(ratWt$x,breaks=seq(0,1,.05))
+

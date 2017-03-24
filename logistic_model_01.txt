@@ -1,25 +1,35 @@
 model {
 for ( i in 1:nResponse ) {
-response[i] ~ dnorm(predicted[i],tau[subject[i]])
-predicted[i] <- (0^(flip[i]) * rawPredicted[i]) + (0^(1-flip[i]) * (1 - rawPredicted[i]))
-flip[i] ~ dbin(flipRate[subject[i]],1)
-rawPredicted[i] <- scale[subject[i]]/(1+exp(-shape[subject[i]] * (rational[i] - location[subject[i]]))) 
-#                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pInt[i] - location[subject[i]]))) +
-#                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pExt[i] - location[subject[i]]))) 
+  response[i] ~ dnorm(predicted[i],tau[subject[i]])
+  predicted[i] <- (0^(flip[i]) * rawPredicted[i]) + (0^(1-flip[i]) * (1 - rawPredicted[i]))
+  flip[i] ~ dbin(flipRate[subject[i]],1)
+  rawPredicted[i] <- scale[subject[i]]/(1+exp(-shape[subject[i]] * (evidence[i] - location[subject[i]]))) 
+  #                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pInt[i] - location[subject[i]]))) +
+  #                      scale[subject[i]]/(1+exp(-shape[subject[i]] * (pExt[i] - location[subject[i]]))) 
+  evidence[i] <- (1-internalEvidenceWeight[subject[i]]-internalEvidenceWeight[subject[i]])*rational[i] + internalEvidenceWeight[subject[i]]*internal[i] + externalEvidenceWeight[subject[i]]*external[i]
 
 }
 
+for ( j in 1:nSubject ) {
+  tau[j] ~ dgamma(k,theta)
+  shape[j] ~ dgamma(k,theta)
+  scale[j] <- 1 #~ dbeta(alpha,beta)
+  flipRate[j] ~ dbeta(alpha,beta)
+  location[j] ~ dbeta(alpha,beta)
+  internalEvidenceWeightUnbounded[j] ~ dbeta(alpha, beta)
+  externalEvidenceWeightUnbounded[j] ~ dbeta(alpha, beta)
+  rationalEvidenceWeightUnbounded[j] ~ dbeta(alpha, beta)
+  internalEvidenceWeight[j] <- internalEvidenceWeightUnbounded[j]/(internalEvidenceWeightUnbounded[j] + externalEvidenceWeightUnbounded[j] + rationalEvidenceWeightUnbounded[j])
+  externalEvidenceWeight[j] <- externalEvidenceWeightUnbounded[j]/(internalEvidenceWeightUnbounded[j] + externalEvidenceWeightUnbounded[j] + rationalEvidenceWeightUnbounded[j])
+  
+}
+  
+  
+  
 #uninformed prior parameter
 k<-1.2 #for gamma
 theta<-1/20 #for gamma
 alpha<-1.1 #for beta
 beta<-1.1 #for beta
 
-for ( j in 1:nSubject ) {
-tau[j] ~ dgamma(k,theta)
-shape[j] ~ dgamma(k,theta)
-scale[j] <- 1 #~ dbeta(alpha,beta)
-flipRate[j] ~ dbeta(alpha,beta)
-location[j] ~ dbeta(alpha,beta)
-}
 }
